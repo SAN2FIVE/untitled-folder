@@ -8,6 +8,8 @@ const app = express();
 const PORT = process.env.PORT || 5001;
 // Use process.cwd() for better reliability on Vercel
 const DATA_FILE = path.join(process.cwd(), 'data.json');
+// In-memory data store for Vercel (since filesystem is read-only)
+let memoryCache = null;
 
 // Middleware
 app.use(cors()); // Simplified CORS
@@ -16,6 +18,11 @@ app.use(bodyParser.urlencoded({ limit: '50mb', extended: true }));
 
 // Helper to read data
 const readData = () => {
+    // If we have data in memory from a recent "write", use that first
+    if (memoryCache) {
+        return memoryCache;
+    }
+
     try {
         let activePath = DATA_FILE;
         if (!fs.existsSync(activePath)) {
@@ -25,11 +32,13 @@ const readData = () => {
 
         if (!fs.existsSync(activePath)) {
             console.log("Data file not found at any path, returning empty structure");
-            return { notices: [], students: [] };
+            memoryCache = { notices: [], students: [] };
+            return memoryCache;
         }
 
         const data = fs.readFileSync(activePath, 'utf8');
-        return JSON.parse(data);
+        memoryCache = JSON.parse(data);
+        return memoryCache;
     } catch (error) {
         console.error("Critical error in readData:", error);
         return { notices: [], students: [] }; // Return empty instead of crashing
@@ -38,14 +47,14 @@ const readData = () => {
 
 // Helper to write data
 const writeData = (data) => {
+    // Update the memory cache immediately so the NEXT "read" sees the new data
+    memoryCache = data;
+
     try {
-        // Vercel filesystem is read-only in production. 
-        // We try to write, but catch the error so the API doesn't return 500.
+        // Still try to write to disk for local development
         fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
-        console.log("Data written successfully to", DATA_FILE);
     } catch (error) {
-        console.error("PERMANENCE WARNING: Could not write to filesystem (expected on Vercel). Data will not be saved permanently.");
-        console.error("Error detail:", error.message);
+        console.warn("Vercel Write Limit: Data saved to memory but not to disk.");
         // We DON'T throw here, so the API response can still be a 201/200 
         // even if the file didn't update on disk.
     }
