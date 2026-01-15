@@ -5,40 +5,46 @@ const fs = require('fs');
 const path = require('path');
 
 const app = express();
-const PORT = 5001;
-const DATA_FILE = path.join(__dirname, 'data.json');
+const PORT = process.env.PORT || 5001;
+// Use process.cwd() for better reliability on Vercel
+const DATA_FILE = path.join(process.cwd(), 'data.json');
 
 // Middleware
-app.use((req, res, next) => {
-    res.header("Access-Control-Allow-Origin", "*");
-    res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-    res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization");
-
-    // Handle preflight (OPTIONS)
-    if (req.method === 'OPTIONS') {
-        return res.sendStatus(200);
-    }
-    next();
-});
-
-app.use(bodyParser.json({ limit: '50mb' })); // Increase limit for Base64 files
+app.use(cors()); // Simplified CORS
+app.use(bodyParser.json({ limit: '50mb' }));
 app.use(bodyParser.urlencoded({ limit: '50mb', extended: true }));
 
 // Helper to read data
 const readData = () => {
-    if (!fs.existsSync(DATA_FILE)) {
-        return { notices: [], students: [] };
+    try {
+        if (!fs.existsSync(DATA_FILE)) {
+            console.log("Data file not found, creating new structure");
+            return { notices: [], students: [] };
+        }
+        const data = fs.readFileSync(DATA_FILE, 'utf8');
+        return JSON.parse(data);
+    } catch (error) {
+        console.error("Error in readData:", error);
+        throw error;
     }
-    const data = fs.readFileSync(DATA_FILE);
-    return JSON.parse(data);
 };
 
 // Helper to write data
 const writeData = (data) => {
-    fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
+    try {
+        fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
+    } catch (error) {
+        console.error("Error in writeData:", error);
+        throw error;
+    }
 };
 
 // --- API Endpoints ---
+
+// Root endpoint for testing
+app.get('/', (req, res) => {
+    res.json({ message: "TSDC Campus API is running", status: "ok" });
+});
 
 // Get all notices
 app.get('/api/notices', (req, res) => {
@@ -46,7 +52,12 @@ app.get('/api/notices', (req, res) => {
         const data = readData();
         res.json(data.notices);
     } catch (error) {
-        res.status(500).json({ message: "Error reading notices" });
+        console.error(error);
+        res.status(500).json({
+            message: "Error reading notices",
+            error: error.message,
+            path: DATA_FILE
+        });
     }
 });
 
@@ -73,7 +84,7 @@ app.post('/api/notices', (req, res) => {
 
         res.status(201).json(newNotice);
     } catch (error) {
-        res.status(500).json({ message: "Error saving notice" });
+        res.status(500).json({ message: "Error saving notice", error: error.message });
     }
 });
 
@@ -86,7 +97,7 @@ app.delete('/api/notices/:id', (req, res) => {
         writeData(db);
         res.json({ message: "Notice deleted successfully" });
     } catch (error) {
-        res.status(500).json({ message: "Error deleting notice" });
+        res.status(500).json({ message: "Error deleting notice", error: error.message });
     }
 });
 
@@ -112,7 +123,7 @@ app.post('/api/students', (req, res) => {
 
         res.status(201).json(newStudent);
     } catch (error) {
-        res.status(500).json({ message: "Error saving student data" });
+        res.status(500).json({ message: "Error saving student data", error: error.message });
     }
 });
 
@@ -122,11 +133,16 @@ app.get('/api/students', (req, res) => {
         const data = readData();
         res.json(data.students || []);
     } catch (error) {
-        res.status(500).json({ message: "Error reading students" });
+        res.status(500).json({ message: "Error reading students", error: error.message });
     }
 });
 
-// Start server
-app.listen(PORT, () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-});
+// Start server (only if not running as a serverless function)
+if (process.env.NODE_ENV !== 'production') {
+    app.listen(PORT, () => {
+        console.log(`Server running locally on http://localhost:${PORT}`);
+    });
+}
+
+module.exports = app;
+
