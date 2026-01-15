@@ -1,6 +1,31 @@
 // --- 1. CONFIGURATION ---
 const API_URL = 'https://tsdc-campus-server.vercel.app/api';
 
+// --- UTILS ---
+function showToast(message, type = 'success') {
+    let container = document.querySelector('.toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.className = 'toast-container';
+        document.body.appendChild(container);
+    }
+
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+
+    let icon = "✅";
+    if (type === 'error') icon = "❌";
+    if (type === 'delete') icon = "🗑️";
+
+    toast.innerHTML = `<span>${icon}</span> <span>${message}</span>`;
+    container.appendChild(toast);
+
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
+}
+
 // --- 1. ADMIN AUTHENTICATION ---
 function verifyAdmin() {
     const passInput = document.getElementById('adminPass');
@@ -14,8 +39,9 @@ function verifyAdmin() {
         adminBox.classList.remove('hidden');
         loadAdminNotices();
         loadStudentLogs();
+        showToast("Access Granted: Admin Logged In");
     } else {
-        alert("Access Denied: Incorrect Password");
+        showToast("Access Denied: Incorrect Password", "error");
         passInput.value = "";
     }
 }
@@ -47,7 +73,7 @@ async function publishNotice() {
     const title = document.getElementById('noticeTitle').value;
     const dept = document.getElementById('targetDept').value;
 
-    if (!title || !uploadedFile) return alert("Please provide a title and a file!");
+    if (!title || !uploadedFile) return showToast("Please provide a title and a file!", "error");
 
     const noticeData = {
         title: title,
@@ -65,17 +91,18 @@ async function publishNotice() {
         });
 
         if (response.ok) {
-            alert("Notice Broadcasted Successfully!");
+            showToast("Notice Broadcasted Successfully!");
             // Reset form
             document.getElementById('noticeTitle').value = '';
             document.getElementById('fileNameDisplay').innerText = "Tap to upload PDF or Image";
             uploadedFile = null;
             loadAdminNotices();
         } else {
-            alert("Failed to publish notice.");
+            showToast("Failed to publish notice.", "error");
         }
     } catch (error) {
         console.error("Error publishing notice:", error);
+        showToast("Network error publishing notice.", "error");
     }
 }
 
@@ -115,12 +142,14 @@ async function deleteNotice(id) {
         });
 
         if (response.ok) {
+            showToast("Notice Deleted Successfully", "delete");
             loadAdminNotices();
         } else {
-            alert("Failed to delete notice.");
+            showToast("Failed to delete notice.", "error");
         }
     } catch (error) {
         console.error("Error deleting notice:", error);
+        showToast("Network error deleting notice.", "error");
     }
 }
 
